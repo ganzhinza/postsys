@@ -1,0 +1,62 @@
+scalar Time
+
+directive @goField(
+    forceResolver: Boolean
+    name: String
+    omittable: Boolean
+) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
+
+type Post {
+  id: Int!
+  authorID: Int!
+  title: String!
+  content: String!
+  allowComments: Boolean!
+  createdAt: Time!
+  comments(limit: Int, offset: Int): BranchComments! @goField(forceResolver: true)
+}
+
+type BranchComments {
+  comments: [Comment!]!
+  hasNext: Boolean!
+  totalCount: Int!
+}
+
+type Comment {
+  id: Int!
+  content: String!
+  postID: Int!
+  parentID: Int
+  authorID: Int!
+  createdAt: Time!
+  branch(limit: Int, offset: Int): BranchComments! @goField(forceResolver: true)
+}
+
+type Query {
+  posts: [Post!]!
+  post(id: Int!): Post
+}
+
+input InputPost {
+  authorID: Int!
+  title: String!
+  content: String!
+  allowComments: Boolean!
+}
+
+input InputComment {
+  content: String!
+  postID: Int!
+  parentID: Int
+  authorID: Int!
+}
+
+type Mutation {
+  createComment(input: InputComment!): Comment!
+  createPost(input: InputPost!): Post!
+  updatePostCommentsAvailability(postID: Int!, userID: Int!, availability: Boolean!): Post!
+}
+
+type Subscription {
+  addComment(postID: Int!): Comment!
+}
