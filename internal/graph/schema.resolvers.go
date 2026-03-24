@@ -113,8 +113,11 @@ func (r *commentResolver) Branch(ctx context.Context, obj *model.Comment, limit 
 	total := int32(len(children))
 
 	lim, off := normalizePagination(limit, offset, 10, 0)
-
-	page := children[off : off+lim]
+	end := off + lim
+	if end > int32(len(children)) {
+		end = int32(len(children))
+	}
+	page := children[off:end]
 
 	modelComments := make([]model.Comment, len(page))
 	for i, c := range page {
