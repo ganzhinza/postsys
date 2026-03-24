@@ -1,4 +1,4 @@
-Система для работы с постами и комментариями
+<h1> Система для работы с постами и комментариями </h1>
 
 В этом проекте реализована система для работы с постами и комментариями аналогичная блогам/формам
 
@@ -42,3 +42,88 @@
    После запуска GraphQL Playground будет доступен по адресу: http://localhost:8080/
    P.S. Для продакшена лучше отключать, но удобно для тестирования
 
+Примеры запросов:
+- Получить все посты
+  ```
+  query {
+    posts {
+      id
+      title
+      content
+      allowComments
+      createdAt
+    }
+  }
+  ```
+- Получить пост с комментариями и пагинацией:
+  ```
+  query {
+    post(id: 1) {
+      id
+      title
+      comments(limit: 5, offset: 0) {
+        comments {
+          id
+          content
+          branch(limit: 10) {
+            comments { id content }
+            hasNext
+          }
+        }
+        hasNext
+        totalCount
+      }
+    }
+  }
+  ```
+- Создать пост
+  ```
+  mutation {
+    createPost(input: {
+      authorID: 1
+      title: "Hello"
+      content: "World"
+      allowComments: true
+    }) {
+      id
+      title
+    }
+  }
+  ```
+- Создать комментарий
+  ```
+  mutation {
+    createComment(input: {
+      postID: 1
+      content: "Great post!"
+      authorID: 2
+      parentID: null   
+    }) {
+      id
+      content
+      branch {
+        comments { id }
+      }
+    }
+  }
+  ```
+ - Включить/отключить комментарии у поста (может менять только автор):
+   ```
+   mutation {
+      updatePostCommentsAvailability(postID: 1, userID: 1, availability: false) {
+        id
+        allowComments
+      }
+    }
+   ```
+- Подписаться на комментарии к посту:
+  ```
+  subscription {
+    addComment(postID: 1) {
+      id
+      content
+      authorID
+      createdAt
+    }
+  }
+  ```
