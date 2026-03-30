@@ -2,8 +2,8 @@ package memdb
 
 import (
 	"context"
-	"fmt"
 	"postsys/internal/entity"
+	"postsys/internal/errors"
 	"sort"
 	"sync"
 	"time"
@@ -109,7 +109,7 @@ func (db *DB) GetPost(ctx context.Context, postID int32) (entity.Post, error) {
 
 	p, ok := db.posts[postID]
 	if !ok {
-		return entity.Post{}, fmt.Errorf("post not found")
+		return entity.Post{}, errors.PostNotFoundError
 	}
 	return *p, nil
 }
@@ -147,7 +147,7 @@ func (db *DB) GetCommentAvailability(ctx context.Context, postID int32) (bool, e
 
 	post, ok := db.posts[postID]
 	if !ok {
-		return false, fmt.Errorf("post not found")
+		return false, errors.PostNotFoundError
 	}
 
 	return post.AllowComments, nil
@@ -159,7 +159,7 @@ func (db *DB) GetCommentPath(ctx context.Context, commentID int32) ([]int32, err
 
 	originalComment, ok := db.comments[commentID]
 	if !ok {
-		return nil, fmt.Errorf("comment not found")
+		return nil, errors.CommentNotFoundError
 	}
 
 	path := make([]int32, len(originalComment.Path))
@@ -174,7 +174,7 @@ func (db *DB) UpdateCommentAvailability(ctx context.Context, postID int32, avail
 
 	p, ok := db.posts[postID]
 	if !ok {
-		return entity.Post{}, fmt.Errorf("post not found")
+		return entity.Post{}, errors.PostNotFoundError
 	}
 	p.AllowComments = availability
 

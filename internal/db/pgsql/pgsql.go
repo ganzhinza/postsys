@@ -4,9 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"postsys/internal/db/pgsql/sqlc"
 	"postsys/internal/entity"
+	apperr "postsys/internal/errors"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -63,7 +63,7 @@ func (s *db) GetPost(ctx context.Context, postID int32) (entity.Post, error) {
 	dbPost, err := s.q.GetPost(ctx, postID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return entity.Post{}, fmt.Errorf("no post with such id")
+			return entity.Post{}, apperr.PostNotFoundError
 		}
 		return entity.Post{}, err
 	}
@@ -146,7 +146,7 @@ func (s *db) GetCommentAvailability(ctx context.Context, postID int32) (bool, er
 	allow, err := s.q.GetCommentsAvailability(ctx, int32(postID))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return false, fmt.Errorf("post not found")
+			return false, apperr.PostNotFoundError
 		}
 		return false, err
 	}
@@ -157,7 +157,7 @@ func (s *db) GetCommentPath(ctx context.Context, commentID int32) ([]int32, erro
 	dbPath, err := s.q.GetCommentPath(ctx, int32(commentID))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("path not found")
+			return nil, apperr.PathNotFoundError
 		}
 		return nil, err
 	}
@@ -172,7 +172,7 @@ func (s *db) UpdateCommentAvailability(ctx context.Context, postID int32, availa
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return entity.Post{}, fmt.Errorf("no post with such id")
+			return entity.Post{}, apperr.PostNotFoundError
 		}
 		return entity.Post{}, err
 	}

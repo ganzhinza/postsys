@@ -2,9 +2,9 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"postsys/internal/db"
 	"postsys/internal/entity"
+	"postsys/internal/errors"
 )
 
 type ServiceImpl struct {
@@ -77,10 +77,10 @@ func (s *ServiceImpl) CreateComment(ctx context.Context, comment entity.InputCom
 		return entity.Comment{}, err
 	}
 	if availability == false {
-		return entity.Comment{}, fmt.Errorf("comments disabled")
+		return entity.Comment{}, errors.CommentsDisabledError
 	}
 	if len(comment.Content) > 2000 {
-		return entity.Comment{}, fmt.Errorf("comment too long")
+		return entity.Comment{}, errors.CommentTooLongError
 	}
 
 	path := []int32{}
@@ -104,7 +104,7 @@ func (s *ServiceImpl) UpdateCommentAvailability(ctx context.Context, postID, use
 		return entity.Post{}, err
 	}
 	if userID != post.AuthorID {
-		return entity.Post{}, fmt.Errorf("only post owner can update comment availability")
+		return entity.Post{}, errors.NotOwnerUpdatesCommentAvailabilityError
 	}
 	return s.db.UpdateCommentAvailability(ctx, postID, availability)
 }

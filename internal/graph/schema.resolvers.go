@@ -7,9 +7,10 @@ package graph
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"postsys/internal/adapter"
 	"postsys/internal/entity"
+	apperr "postsys/internal/errors"
 	"postsys/internal/graph/model"
 )
 
@@ -17,7 +18,7 @@ import (
 func (r *mutationResolver) CreateComment(ctx context.Context, input model.InputComment) (*model.Comment, error) {
 	comment, err := r.service.CreateComment(ctx, adapter.ToServiceInputComment(input))
 	if err != nil {
-		return nil, err
+		return nil, handleError(err)
 	}
 
 	gqlComment := adapter.ToGraphQLComment(comment)
@@ -41,7 +42,7 @@ func (r *mutationResolver) CreateComment(ctx context.Context, input model.InputC
 func (r *mutationResolver) CreatePost(ctx context.Context, input model.InputPost) (*model.Post, error) {
 	post, err := r.service.CreatePost(ctx, adapter.ToServiceInputPost(input))
 	if err != nil {
-		return nil, err
+		return nil, handleError(err)
 	}
 
 	qlPost := adapter.ToGraphQLPost(post)
@@ -52,7 +53,7 @@ func (r *mutationResolver) CreatePost(ctx context.Context, input model.InputPost
 func (r *mutationResolver) UpdatePostCommentsAvailability(ctx context.Context, postID int32, userID int32, availability bool) (*model.Post, error) {
 	post, err := r.service.UpdateCommentAvailability(ctx, postID, userID, availability)
 	if err != nil {
-		return nil, err
+		return nil, handleError(err)
 	}
 
 	qlPost := adapter.ToGraphQLPost(post)
@@ -65,12 +66,12 @@ func (r *postResolver) Comments(ctx context.Context, obj *model.Post, limit *int
 
 	tree, err := r.service.GetCommentsTree(ctx, obj.ID, lim, off)
 	if err != nil {
-		return nil, err
+		return nil, handleError(err)
 	}
 
 	childrenMap, ok := ctx.Value(childrenMapKey).(map[int32][]entity.Comment)
 	if !ok || childrenMap == nil {
-		return nil, fmt.Errorf("internal server erroro")
+		return nil, handleError(apperr.InternalError)
 	}
 
 	for k, v := range tree.Children {
@@ -94,20 +95,12 @@ func (r *postResolver) Comments(ctx context.Context, obj *model.Post, limit *int
 func (r *commentResolver) Branch(ctx context.Context, obj *model.Comment, limit *int32, offset *int32) (*model.BranchComments, error) {
 	childrenMap, ok := ctx.Value(childrenMapKey).(map[int32][]entity.Comment)
 	if !ok || childrenMap == nil {
-		return &model.BranchComments{
-			Comments:   []model.Comment{},
-			TotalCount: 0,
-			HasNext:    false,
-		}, nil
+		return nil, handleError(apperr.InternalError)
 	}
 
 	children, exists := childrenMap[obj.ID]
 	if !exists {
-		return &model.BranchComments{
-			Comments:   []model.Comment{},
-			TotalCount: 0,
-			HasNext:    false,
-		}, nil
+		return nil, handleError(apperr.InternalError)
 	}
 
 	total := int32(len(children))
@@ -136,7 +129,7 @@ func (r *commentResolver) Branch(ctx context.Context, obj *model.Comment, limit 
 func (r *queryResolver) Posts(ctx context.Context) ([]model.Post, error) {
 	posts, err := r.service.GetPosts(ctx)
 	if err != nil {
-		return nil, err
+		return nil, handleError(err)
 	}
 
 	qlPosts := make([]model.Post, len(posts))
@@ -150,7 +143,7 @@ func (r *queryResolver) Posts(ctx context.Context) ([]model.Post, error) {
 func (r *queryResolver) Post(ctx context.Context, id int32) (*model.Post, error) {
 	post, err := r.service.GetPost(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, handleError(err)
 	}
 
 	qlPost := adapter.ToGraphQLPost(post)
@@ -213,4 +206,13 @@ func normalizePagination(limit, offset *int32, defaultLimit, defaultOffset int32
 		off = *offset
 	}
 	return lim, off
+}
+
+func handleError(err error) error {
+	var de *apperr.DomainError
+	if errors.As(err, &de) {
+		return err
+	}
+
+	return apperr.InternalError
 }
