@@ -27,13 +27,13 @@ import (
 func main() {
 	timeout := mustGetDuration("TIMEOUT")
 	idleTimeout := mustGetDuration("IDLE_TIMEOUT")
-	shutdownTimeout := mustGetDuration("SHUTDOWN_TIMEOUT") // новая переменная
+	shutdownTimeout := mustGetDuration("SHUTDOWN_TIMEOUT")
 
 	port := mustGetEnv("SERVER_PORT")
 	storageType := os.Getenv("STORAGE_TYPE")
 
 	var dbInstance db.DB
-	var pool *pgxpool.Pool // для закрытия при необходимости
+	var pool *pgxpool.Pool
 
 	switch storageType {
 	case "postgres":
@@ -53,7 +53,6 @@ func main() {
 
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: resolver}))
 
-	// настройка транспортов и кэшей (без изменений)
 	srv.AddTransport(transport.Websocket{})
 	srv.AddTransport(transport.Options{})
 	srv.AddTransport(transport.GET{})
@@ -68,7 +67,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:         ":" + port,
-		Handler:      nil, // используем стандартный мультиплексор
+		Handler:      nil,
 		ReadTimeout:  timeout,
 		WriteTimeout: timeout,
 		IdleTimeout:  idleTimeout,

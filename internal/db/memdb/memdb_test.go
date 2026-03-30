@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// test db
 func setupDB(t *testing.T) (*memdb.DB, int32, int32, int32, int32, int32) {
 	db := memdb.New()
 	ctx := context.Background()
