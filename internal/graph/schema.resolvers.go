@@ -8,6 +8,7 @@ package graph
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"postsys/internal/adapter"
 	"postsys/internal/entity"
 	apperr "postsys/internal/errors"
@@ -16,11 +17,15 @@ import (
 
 // CreateComment is the resolver for the createComment field.
 func (r *mutationResolver) CreateComment(ctx context.Context, input model.InputComment) (*model.Comment, error) {
+	logger := slog.With("mutation", "CreateComment", "postID", input.PostID, "authorID", input.AuthorID)
+
 	comment, err := r.service.CreateComment(ctx, adapter.ToServiceInputComment(input))
 	if err != nil {
+		logger.Warn("failed to create comment", "error", err)
 		return nil, handleError(err)
 	}
 
+	logger.Info("comment created", "commentID", comment.ID)
 	gqlComment := adapter.ToGraphQLComment(comment)
 
 	r.mu.RLock()
@@ -31,7 +36,6 @@ func (r *mutationResolver) CreateComment(ctx context.Context, input model.InputC
 		select {
 		case ch <- &gqlComment:
 		default:
-
 		}
 	}
 
@@ -40,10 +44,14 @@ func (r *mutationResolver) CreateComment(ctx context.Context, input model.InputC
 
 // CreatePost is the resolver for the createPost field.
 func (r *mutationResolver) CreatePost(ctx context.Context, input model.InputPost) (*model.Post, error) {
+	logger := slog.With("mutation", "CreatePost", "authorID", input.AuthorID, "title", input.Title)
+
 	post, err := r.service.CreatePost(ctx, adapter.ToServiceInputPost(input))
 	if err != nil {
+		logger.Warn("failed to create post", "error", err)
 		return nil, handleError(err)
 	}
+	logger.Info("post created", "postID", post.ID)
 
 	qlPost := adapter.ToGraphQLPost(post)
 	return &qlPost, nil
@@ -51,10 +59,14 @@ func (r *mutationResolver) CreatePost(ctx context.Context, input model.InputPost
 
 // UpdatePostCommentsAvailability is the resolver for the updatePostCommentsAvailability field.
 func (r *mutationResolver) UpdatePostCommentsAvailability(ctx context.Context, postID int32, userID int32, availability bool) (*model.Post, error) {
+	logger := slog.With("mutation", "UpdatePostCommentsAvailability", "postID", postID, "userID", userID, "availability", availability)
+
 	post, err := r.service.UpdateCommentAvailability(ctx, postID, userID, availability)
 	if err != nil {
+		logger.Warn("failed to update availability", "error", err)
 		return nil, handleError(err)
 	}
+	logger.Info("availability updated", "availability", post.AllowComments)
 
 	qlPost := adapter.ToGraphQLPost(post)
 	return &qlPost, nil
@@ -62,15 +74,18 @@ func (r *mutationResolver) UpdatePostCommentsAvailability(ctx context.Context, p
 
 // Comments is the resolver for the comments field.
 func (r *postResolver) Comments(ctx context.Context, obj *model.Post, limit *int32, offset *int32) (*model.BranchComments, error) {
+	logger := slog.With("query", "Post.Comments")
 	lim, off := normalizePagination(limit, offset, 10, 0)
 
 	tree, err := r.service.GetCommentsTree(ctx, obj.ID, lim, off)
 	if err != nil {
+		logger.Warn("failed to get comments tree", "error", err)
 		return nil, handleError(err)
 	}
 
 	childrenMap, ok := ctx.Value(childrenMapKey).(map[int32][]entity.Comment)
 	if !ok || childrenMap == nil {
+		logger.Warn("childrenMap not found in context")
 		return nil, handleError(apperr.InternalError)
 	}
 
@@ -93,14 +108,21 @@ func (r *postResolver) Comments(ctx context.Context, obj *model.Post, limit *int
 
 // Branch is the resolver for the branch field.
 func (r *commentResolver) Branch(ctx context.Context, obj *model.Comment, limit *int32, offset *int32) (*model.BranchComments, error) {
+	logger := slog.With("query", "Post.Branch")
+
 	childrenMap, ok := ctx.Value(childrenMapKey).(map[int32][]entity.Comment)
 	if !ok || childrenMap == nil {
+		logger.Warn("chidrenMap not found in context")
 		return nil, handleError(apperr.InternalError)
 	}
 
 	children, exists := childrenMap[obj.ID]
 	if !exists {
-		return nil, handleError(apperr.InternalError)
+		return &model.BranchComments{
+			Comments:   []model.Comment{},
+			TotalCount: 0,
+			HasNext:    false,
+		}, nil
 	}
 
 	total := int32(len(children))
@@ -127,10 +149,14 @@ func (r *commentResolver) Branch(ctx context.Context, obj *model.Comment, limit 
 
 // Posts is the resolver for the posts field.
 func (r *queryResolver) Posts(ctx context.Context) ([]model.Post, error) {
+	logger := slog.With("query", "Posts")
+
 	posts, err := r.service.GetPosts(ctx)
 	if err != nil {
+		logger.Warn("get all posts error", "error", err)
 		return nil, handleError(err)
 	}
+	logger.Debug("posts got", "count", len(posts))
 
 	qlPosts := make([]model.Post, len(posts))
 	for i := range posts {
@@ -141,10 +167,14 @@ func (r *queryResolver) Posts(ctx context.Context) ([]model.Post, error) {
 
 // Post is the resolver for the post field.
 func (r *queryResolver) Post(ctx context.Context, id int32) (*model.Post, error) {
+	logger := slog.With("query", "Post", "postID", id)
+
 	post, err := r.service.GetPost(ctx, id)
 	if err != nil {
+		logger.Warn("failed to get post", "error", err)
 		return nil, handleError(err)
 	}
+	logger.Debug("post got")
 
 	qlPost := adapter.ToGraphQLPost(post)
 	return &qlPost, nil
@@ -152,11 +182,13 @@ func (r *queryResolver) Post(ctx context.Context, id int32) (*model.Post, error)
 
 // AddComment is the resolver for the addComment field.
 func (r *subscriptionResolver) AddComment(ctx context.Context, postID int32) (<-chan *model.Comment, error) {
+	logger := slog.With("subscription", "PostID", postID)
 	ch := make(chan *model.Comment, 10)
 
 	r.mu.Lock()
 	r.subscribersByPosts[postID] = append(r.subscribersByPosts[postID], ch)
 	r.mu.Unlock()
+	logger.Info("subscriber added")
 
 	go func() {
 		<-ctx.Done()
@@ -170,6 +202,7 @@ func (r *subscriptionResolver) AddComment(ctx context.Context, postID int32) (<-
 				break
 			}
 		}
+		logger.Info("subscriber deleted")
 	}()
 
 	return ch, nil

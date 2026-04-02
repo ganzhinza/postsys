@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -25,6 +26,8 @@ import (
 )
 
 func main() {
+	slog.SetDefault(initLogger())
+
 	timeout := mustGetDuration("TIMEOUT")
 	idleTimeout := mustGetDuration("IDLE_TIMEOUT")
 	shutdownTimeout := mustGetDuration("SHUTDOWN_TIMEOUT")
@@ -41,7 +44,8 @@ func main() {
 		var err error
 		pool, err = pgxpool.New(context.Background(), connStr)
 		if err != nil {
-			log.Fatal("Unable to connect to database:", err)
+			slog.Error("unable to connect to database", "error", err)
+			os.Exit(1)
 		}
 		dbInstance = pgsql.New(pool)
 	default:
@@ -74,9 +78,9 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("connect to http://localhost:%s/ for GraphQL playground", port)
+		slog.Debug("starting server", "url", fmt.Sprintf("http://localhost:%s/", port))
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("server failed: %v", err)
+			slog.Error("server failed", "error", err)
 		}
 	}()
 
@@ -84,18 +88,18 @@ func main() {
 	defer stop()
 
 	<-ctx.Done()
-	log.Println("shutting down")
+	slog.Info("shutting down")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("server shutdown error: %v", err)
+		slog.Error("server shutdown error", "error", err)
 	}
 
 	if pool != nil {
 		pool.Close()
-		log.Println("database connection pool closed")
+		slog.Info("database connection pool closed")
 	}
 }
 
@@ -130,4 +134,24 @@ func mustGetDuration(key string) time.Duration {
 		log.Fatalf("invalid %s value: %v", key, err)
 	}
 	return dur
+}
+
+func initLogger() *slog.Logger {
+	logLevelStr := mustGetEnv("LOG_LEVEL")
+	var logLevel slog.Level
+	err := logLevel.UnmarshalText([]byte(logLevelStr))
+	if err != nil {
+		log.Fatalf("invalid log level: %s", logLevelStr)
+	}
+	opts := &slog.HandlerOptions{Level: logLevel}
+
+	logFormat := mustGetEnv("LOG_FORMAT")
+
+	var handler slog.Handler
+	if logFormat == "json" {
+		handler = slog.NewJSONHandler(os.Stderr, opts)
+	} else {
+		handler = slog.NewTextHandler(os.Stderr, opts)
+	}
+	return slog.New(handler)
 }
